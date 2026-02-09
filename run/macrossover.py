@@ -1,11 +1,6 @@
-import sys
-import os
-
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 import pandas as pd
 from backtesting.macrossovers import ma_crossover_backtest
-from src.metrics.performance import evaluate, print_evaluation
+from performance import evaluate, print_evaluation
 
 
 def main():
@@ -18,7 +13,7 @@ def main():
     print(f"Loaded {len(df)} days")
     print(f"Date range: {df['open_time'].iloc[0].date()} to {df['open_time'].iloc[-1].date()}")
 
-    result = ma_crossover_backtest(df, initial_capital=10000.0, short_window=50, long_window=200)
+    result = ma_crossover_backtest(df, initial_capital=10000.0, short_window=7, long_window=21)
     metrics = evaluate(result, periods_per_year=365)
     print_evaluation(metrics)
 

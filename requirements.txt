@@ -12,3 +12,4 @@ mlflow>=3.4.0
 pyyaml
 jupyter
 python-dotenv
+borch

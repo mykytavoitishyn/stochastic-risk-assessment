@@ -1,24 +1,12 @@
 import pandas as pd
 
-
 def dca_backtest(
     df: pd.DataFrame,
     investment_amount: float = 100.0,
     frequency: str = 'weekly',
     total_budget: float = None,
 ) -> dict:
-    """
-    Dollar Cost Averaging: invest fixed amount at regular intervals.
-
-    Parameters:
-        df: DataFrame with 'close_price' and 'open_time' columns
-        investment_amount: Amount to invest per period in USDT
-        frequency: 'daily', 'weekly', 'biweekly', 'monthly'
-        total_budget: Max total to invest (None = unlimited)
-
-    Returns:
-        dict with portfolio_values Series and trade info
-    """
+    
     df = df.copy()
     df['open_time'] = pd.to_datetime(df['open_time'])
     df = df.sort_values('open_time').reset_index(drop=True)

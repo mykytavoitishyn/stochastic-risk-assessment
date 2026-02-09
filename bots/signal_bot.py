@@ -10,11 +10,11 @@ load_dotenv()
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
 BINANCE_URL = "https://api.binance.com"
 SYMBOL = "BTCUSDT"
-INTERVAL = "5m"
+INTERVAL = "1m"
 RSI_PERIOD = 14
 RSI_OVERSOLD = 30
 RSI_OVERBOUGHT = 70
-CHECK_INTERVAL = 60  # Check every 1 minute for testing
+CHECK_INTERVAL = 60
 
 
 def get_klines(limit=100):

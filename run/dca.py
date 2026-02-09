@@ -1,11 +1,6 @@
-import sys
-import os
-
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 import pandas as pd
 from backtesting.dca import dca_backtest
-from src.metrics.performance import evaluate, print_evaluation
+from src.performance import evaluate, print_evaluation
 
 
 def main():
@@ -18,7 +13,7 @@ def main():
     print(f"Loaded {len(df)} days")
     print(f"Date range: {df['open_time'].iloc[0].date()} to {df['open_time'].iloc[-1].date()}")
 
-    result = dca_backtest(df, investment_amount=100.0, frequency='weekly')
+    result = dca_backtest(df, investment_amount=100.0, frequency='daily')
     metrics = evaluate(result, periods_per_year=365)
     print_evaluation(metrics)
 
