@@ -23,6 +23,7 @@ def ma_crossover_backtest(
     df['open_time'] = pd.to_datetime(df['open_time'])
     df = df.sort_values('open_time').reset_index(drop=True)
 
+    # two moving averages
     df['ma_short'] = df['close_price'].rolling(window=short_window).mean()
     df['ma_long'] = df['close_price'].rolling(window=long_window).mean()
 
@@ -31,6 +32,7 @@ def ma_crossover_backtest(
     df.loc[df['ma_short'] <= df['ma_long'], 'signal'] = -1
     df['crossover'] = df['signal'] - df['signal'].shift(1)
 
+    # initialization
     cash = initial_capital
     btc_holdings = 0.0
     df['portfolio_value'] = 0.0
@@ -41,13 +43,13 @@ def ma_crossover_backtest(
         price = row['close_price']
 
         if row['crossover'] == 2 and btc_holdings == 0:  # Golden cross
-            btc_holdings = cash / price
+            btc_holdings = cash / price # buy
             cash = 0.0
         elif row['crossover'] == -2 and btc_holdings > 0:  # Death cross
-            cash = btc_holdings * price
+            cash = btc_holdings * price # sell
             btc_holdings = 0.0
 
-        df.at[idx, 'portfolio_value'] = cash + (btc_holdings * price)
+        df.at[idx, 'portfolio_value'] = cash + (btc_holdings * price) # current portfolio value
 
     df.loc[:start_idx, 'portfolio_value'] = initial_capital
 
