@@ -25,7 +25,13 @@ def get_klines(BASE_URL: str, symbol: str, interval: str, startTime: int = None,
     url = f"{BASE_URL}/api/v3/klines"
     all_klines = []
     
-    interval_ms = {"5m": 5 * 60 * 1000}
+    interval_ms = {
+        "1m": 1 * 60 * 1000,
+        "5m": 5 * 60 * 1000,
+        "15m": 15 * 60 * 1000,
+        "1h": 60 * 60 * 1000,
+        "1d": 24 * 60 * 60 * 1000
+    }
     
     if startTime is not None and endTime is not None and interval in interval_ms:
         time_diff_ms = endTime - startTime

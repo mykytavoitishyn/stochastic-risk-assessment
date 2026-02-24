@@ -4,10 +4,10 @@ import pandas as pd
 BASE_URL = "https://api.binance.com"
 
 symbol = "BTCUSDT"
-interval = "5m"
+interval = "15m"
 
 start_date = pd.to_datetime("2000-11-21")
-end_date = pd.to_datetime("2025-11-21")
+end_date = pd.to_datetime("2026-02-23")
 
 start_date_int = int(start_date.value / 1e6)
 end_date_int = int(end_date.value / 1e6)

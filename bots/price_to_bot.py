@@ -1,4 +1,4 @@
-"""Fetch BTC price from Binance every 5 minutes and send to Discord."""
+"""Fetch BTC price from Binance every minute and send to Discord bot."""
 import os
 import time
 import requests
@@ -10,7 +10,7 @@ load_dotenv()
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
 BINANCE_BASE_URL = "https://api.binance.com"
 SYMBOL = "BTCUSDT"
-INTERVAL_SECONDS = 5 * 60  # 5 minutes
+INTERVAL_SECONDS = 60
 
 
 def get_btc_price() -> dict:
@@ -51,9 +51,9 @@ def main():
             print(f"[{timestamp}] BTC: ${price:,.2f}")
 
             if send_discord_message(message):
-                print("  -> Sent to Discord")
+                print("Sent to Discord")
             else:
-                print("  -> Failed to send to Discord")
+                print("Failed to send to Discord")
 
         except requests.RequestException as e:
             print(f"Error fetching price: {e}")
