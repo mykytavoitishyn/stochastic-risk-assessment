@@ -42,7 +42,7 @@ def send_market_buy_order(
     symbol: str = "BTCUSDT",
     quantity: float = 0.0001,
     recv_window: int = 5000,
-    base_url: str = "https://testnet.binance.vision"  # Default to testnet for safety
+    base_url: str = "https://testnet.binance.vision" # testnet
 ):
     endpoint = "/api/v3/order"
 

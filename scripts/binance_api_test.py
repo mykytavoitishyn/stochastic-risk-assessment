@@ -1,12 +1,16 @@
-from binance_api import ping_binance
-from binance_api import get_klines
-from binance_api import send_market_buy_order
-
 import pandas as pd
 import os
-from dotenv import load_dotenv
 
+os.chdir("/home/mykyta/Code/personal/stochastic-risk-assessment")
+
+
+from dotenv import load_dotenv
 load_dotenv()
+
+
+from src.binance_api import ping_binance
+from src.binance_api import get_klines
+from src.binance_api import send_market_buy_order
 
 base_url = "https://testnet.binance.vision"
 
@@ -26,8 +30,6 @@ if ping_binance(base_url) == True:
     df[numeric_cols] = df[numeric_cols].astype(float)
 
 
-
-
 api_key = os.getenv("BINANCE_TESTNET_API_KEY")
 api_secret = os.getenv("BINANCE_TESTNET_API_SECRET")
 
@@ -36,7 +38,7 @@ try:
     result = send_market_buy_order(
         api_key=api_key,
         api_secret=api_secret,
-        base_url=base_url  # Use testnet
+        base_url=base_url 
     )
     print("\nOrder successful!")
     print(result)
