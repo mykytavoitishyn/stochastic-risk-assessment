@@ -12,3 +12,5 @@ The system operates in two modes:
 - **Autonomous mode** — the system executes within pre-defined risk boundaries without interruption
 
 The design priority is ease of interaction — switching modes, reviewing signals, and overriding decisions should require minimal effort.
+
+You learn trading by tradings
