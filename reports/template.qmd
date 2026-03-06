@@ -1,0 +1,75 @@
+---
+title: "Weekly Strategy Report — YYYY-Www"
+date: YYYY-MM-DD
+---
+
+```{python}
+#| echo: false
+import sys, os
+sys.path.insert(0, os.path.abspath("../.."))  # adjust if needed
+
+import pandas as pd
+import matplotlib.pyplot as plt
+
+RESULTS_DIR = "../../results/YYYY-MM-DD"  # point to the dated results folder
+```
+
+## Market Overview
+
+> Brief qualitative summary of BTC this week — trend, key levels, notable events.
+
+```{python}
+# Load price data and show weekly summary stats
+df = pd.read_csv("../../data/org/marketdata/BTCUSDT_15m_2000-11-21 00:00:00_2026-02-23 00:00:00.csv", index_col=0)
+df["open_time"] = pd.to_datetime(df["open_time"])
+week = df.tail(672)  # ~1 week of 15m candles
+
+print(f"Open:  ${week['close_price'].iloc[0]:,.2f}")
+print(f"Close: ${week['close_price'].iloc[-1]:,.2f}")
+print(f"High:  ${week['close_price'].max():,.2f}")
+print(f"Low:   ${week['close_price'].min():,.2f}")
+print(f"Change: {(week['close_price'].iloc[-1] / week['close_price'].iloc[0] - 1) * 100:.2f}%")
+```
+
+## Strategy Performance
+
+```{python}
+from IPython.display import Image
+Image(filename=f"{RESULTS_DIR}/portfolio_over_time.png")
+```
+
+| Metric | Value |
+|---|---|
+| Total Return | |
+| Annualized Return | |
+| Sharpe Ratio | |
+| Max Drawdown | |
+| Win Rate | |
+| # Trades | |
+
+## Trade Log
+
+```{python}
+trades = pd.read_csv(f"{RESULTS_DIR}/trade_history.csv")
+trades
+```
+
+## Grid Search Insights
+
+```{python}
+# grid = pd.read_csv(f"{RESULTS_DIR}/grid_search.csv")
+# grid.head(10)
+```
+
+> Which param region ranked highest? Did it shift vs last week?
+
+## Notes & Observations
+
+-
+-
+-
+
+## Next Steps
+
+- [ ]
+- [ ]
