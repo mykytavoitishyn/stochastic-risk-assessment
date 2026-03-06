@@ -25,7 +25,7 @@ def ma_crossover_backtest(
     df["open_time"] = pd.to_datetime(df["open_time"])
     df = df.sort_values("open_time").reset_index(drop=True)
 
-    # two moving averages
+    # two moving averages + trend following
     df["ma_short"] = df["close_price"].rolling(window=short_window).mean()
     df["ma_long"] = df["close_price"].rolling(window=long_window).mean()
     df["ma_trend"] = df["close_price"].rolling(window=trend_window).mean()

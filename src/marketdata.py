@@ -1,7 +1,17 @@
 import requests
 import pandas as pd
 
-def get_orderbook(BASE_URL, symbol, limit):
+def get_orderbook(BASE_URL: str, symbol: str , limit:int) -> object:
+    """Get the most recent order book
+
+    Args:
+        BASE_URL (str): binance api endpoint
+        symbol (str): coin asset
+        limit (int): amoung of most recent orders
+
+    Returns:
+        object: _description_
+    """
     url = f"{BASE_URL}/api/v3/depth"
     params = {"symbol": symbol, "limit": limit}
     response = requests.get(url, params=params)

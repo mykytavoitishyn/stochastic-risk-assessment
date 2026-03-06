@@ -1,5 +1,4 @@
 import requests
-
 import time
 import hmac
 import hashlib
@@ -56,11 +55,7 @@ def send_market_buy_order(
     }
 
     query_string = urlencode(params)
-    signature = hmac.new(
-        api_secret.encode("utf-8"),
-        query_string.encode("utf-8"),
-        hashlib.sha256
-    ).hexdigest()
+    signature = hmac.new(api_secret.encode("utf-8"), query_string.encode("utf-8"), hashlib.sha256).hexdigest()
 
     params["signature"] = signature
 
