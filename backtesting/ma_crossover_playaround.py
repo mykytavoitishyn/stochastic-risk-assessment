@@ -1,192 +1,194 @@
+import os
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
+import time
+import numpy as np
 
-import os 
 os.chdir("/home/mykyta/Code/personal/stochastic-risk-assessment")
 
-# 15 min candles
-data_path = "data/org/marketdata/BTCUSDT_15m_2000-11-21 00:00:00_2026-02-23 00:00:00.csv"
 
-df = pd.read_csv(data_path, index_col=0)
-df['open_time'] = pd.to_datetime(df['open_time'])
+# --- load data ---
+def load_df(datapath: str, start_date: str, end_date: str) -> pd.DataFrame:
+    df = pd.read_csv(datapath, index_col=0)
+    df["open_time"] = pd.to_datetime(df["open_time"])
+    df = df[(df["open_time"] >= start_date) & (df["open_time"] <= end_date)]
+    return df
 
-short_window = 20
-long_window = 50
-trend_window = 200
-cross_persist = 2  # candles the cross must hold to avoid whipsaws
+# --- compute technical indicator ---
+def add_indicators(df: pd.DataFrame, short_window=20, long_window=50, trend_window=200, rsi_window=14) -> pd.DataFrame:
+    df["ma_short"] = df["close_price"].rolling(short_window).mean()
+    df["ma_long"] = df["close_price"].rolling(long_window).mean()
+    df["ma_trend"] = df["close_price"].rolling(trend_window).mean()
+    df["volume_change"] = df["quote_asset_volume"].pct_change()
+    df["price_change"] = df["close_price"].pct_change()
 
-df = df.tail(2000)
+    delta = df["close_price"].diff()
+    gain = delta.clip(lower=0)
+    loss = -delta.clip(upper=0)
+    rs = gain.ewm(com=rsi_window - 1, min_periods=rsi_window).mean() / loss.ewm(com=rsi_window - 1, min_periods=rsi_window).mean()
+    df["rsi"] = 100 - (100 / (1 + rs))
 
-# moving averages
-df["ma_short"] = df["close_price"].rolling(window=short_window).mean()
-df["ma_long"] = df["close_price"].rolling(window=long_window).mean()
-df["ma_trend"] = df["close_price"].rolling(window=trend_window).mean()
+    return df.dropna()
 
-# pct changes for price and volume
-df["volume_change"] = df["quote_asset_volume"].pct_change()
-df["price_change"] = df["close_price"].pct_change()
+# --- add buy/sell/hold signals based on indicators ---
+def add_signals(df: pd.DataFrame, cross_persist=2, rsi_buy=55, rsi_sell=45) -> pd.DataFrame:
+    df["cross_up"] = (df["ma_short"] > df["ma_long"]).astype(int)
+    df["cross_down"] = (df["ma_short"] < df["ma_long"]).astype(int)
 
-# RSI
-rsi_window = 21
-delta = df["close_price"].diff()
-gain = delta.clip(lower=0) # take all the gains
-loss = -delta.clip(upper=0) # take all the losses
-avg_gain = gain.ewm(com=rsi_window - 1, min_periods=rsi_window).mean() # average gain across window
-avg_loss = loss.ewm(com=rsi_window - 1, min_periods=rsi_window).mean() # average loss across window
-rs = avg_gain / avg_loss # ratio gain over loss
-df["rsi"] = 100 - (100 / (1 + rs)) # standardize from 0 to 100
+    df["signal"] = 0
+    buy_mask = (
+        (df["cross_up"].rolling(cross_persist).min() == 1)
+        & (df["cross_up"].shift(cross_persist) == 0)
+        & (df["close_price"] > df["ma_trend"])
+        & (df["rsi"].shift(1) <= rsi_buy)   # not overbought at entry
+    )
+    sell_mask = (
+        (df["cross_down"].rolling(cross_persist).min() == 1)
+        & (df["cross_down"].shift(cross_persist) == 0)
+        & (df["close_price"] < df["ma_trend"])
+        & (df["rsi"].shift(1) >= rsi_sell)  # not oversold at entry
+    )
+    df.loc[buy_mask, "signal"] = 1
+    df.loc[sell_mask, "signal"] = -1
+    return df
 
-# ATR
-atr_window = 14
-df["atr"] = (df["high_price"] - df["low_price"]).rolling(atr_window).mean()
-
-df = df.dropna()
-
-# ma crossover signals with persistence filter (avoids whipsaws)
-df["cross_up"] = (df["ma_short"] > df["ma_long"]).astype(int)
-df["cross_down"] = (df["ma_short"] < df["ma_long"]).astype(int)
-
-df["signal"] = 0
-buy_mask = (
-    (df["cross_up"].rolling(cross_persist).min() == 1) # cross held n bars
-    & (df["cross_up"].shift(cross_persist) == 0) # was below n bars ago (fresh cross)
-    & (df["close_price"] > df["ma_trend"]) # trend filter
-    # & (df["rsi"].shift(1) <= 50)  # rsi filter
-)
-sell_mask = (
-    (df["cross_down"].rolling(cross_persist).min() == 1)
-    & (df["cross_down"].shift(cross_persist) == 0)
-    & (df["close_price"] < df["ma_trend"])
-    # & (df["rsi"].shift(1) >= 50)
-)
-df.loc[buy_mask, "signal"] = 1
-df.loc[sell_mask, "signal"] = -1
-
-
-# aggressive simulation
-def simulate_trades(df, init_portfolio=1_000, trade_size_pct=0.05,
-                    fee_pct=0.0005, leverage=20,
-                    sl_atr_mult = 1.5, tp_atr_mult=3.0):
-    margin   = init_portfolio * trade_size_pct
-    notional = margin * leverage
-
+# --- backtest the strategy ---
+def simulate_trades(df: pd.DataFrame, init_portfolio=1_000, trade_size_pct=0.1, fee_pct=0.0005, leverage=10) -> pd.DataFrame:
+    notional = init_portfolio * trade_size_pct * leverage
     signal_idx = df[df["signal"] != 0].index.tolist()
     trades = []
 
     for i, idx in enumerate(signal_idx):
-        row       = df.loc[idx]
+        row = df.loc[idx]
+        end_idx = signal_idx[i + 1] if i + 1 < len(signal_idx) else df.index[-1]
+        exit_row = df.loc[end_idx]
+
         direction = row["signal"]
-        entry     = row["close_price"]
-        atr       = row["atr"]
+        entry = row["close_price"]
+        exit_price = exit_row["close_price"]
 
-        sl = entry - direction * sl_atr_mult * atr
-        tp = entry + direction * tp_atr_mult * atr
-
-        end_idx       = signal_idx[i + 1] if i + 1 < len(signal_idx) else df.index[-1]
-        trade_candles = df.loc[idx:end_idx]
-
-        exit_price  = trade_candles.iloc[-1]["close_price"]
-        exit_time   = trade_candles.iloc[-1]["open_time"]
-        exit_reason = "signal"
-        candles_passed = len(trade_candles) - 1
-
-        for j, (_, c) in enumerate(trade_candles.iterrows()):
-            if direction == 1:  # long: stopped below sl, took profit above tp
-                if c["low_price"] <= sl:
-                    exit_price, exit_time, exit_reason, candles_passed = sl, c["open_time"], "sl", j
-                    break
-                if c["high_price"] >= tp:
-                    exit_price, exit_time, exit_reason, candles_passed = tp, c["open_time"], "tp", j
-                    break
-            else:               # short: stopped above sl, took profit below tp
-                if c["high_price"] >= sl:
-                    exit_price, exit_time, exit_reason, candles_passed = sl, c["open_time"], "sl", j
-                    break
-                if c["low_price"] <= tp:
-                    exit_price, exit_time, exit_reason, candles_passed = tp, c["open_time"], "tp", j
-                    break
-
-        ret = direction * (exit_price - entry) / entry
-        pnl = (ret * notional) - notional * fee_pct * 2
+        t_return = direction * (exit_price - entry) / entry
+        pnl = (t_return * notional) - notional * fee_pct * 2
 
         trades.append({
-            "entry_time":     row["open_time"],
-            "exit_time":      exit_time,
-            "entry_price":    entry,
-            "exit_price":     exit_price,
-            "signal":         direction,
-            "ret":            ret,
-            "pnl":            pnl,
-            "exit_reason":    exit_reason,
-            "candles":        candles_passed,
-            "time_held":      exit_time - row["open_time"],
+            "entry_time":  row["open_time"],
+            "exit_time":   exit_row["open_time"],
+            "entry_price": entry,
+            "exit_price":  exit_price,
+            "signal":      direction,
+            "return":      t_return,
+            "pnl":         pnl,
+            "candles":     len(df.loc[idx:end_idx]) - 1,
         })
 
     t = pd.DataFrame(trades)
     t["portfolio"] = init_portfolio + t["pnl"].cumsum()
-    return t
+    return t.sort_values(by="pnl")
 
+# --- calculate the annualized sharpe ratio ---
+def sharpe_ratio(trades: pd.DataFrame, risk_free_rate: float = 0.05) -> float:
+    returns = trades["return"]
+    if returns.std() == 0:
+        return float("nan")
+    years = (trades["exit_time"].max() - trades["entry_time"].min()).days / 365
+    trades_per_year = len(trades) / years
+    rf_per_trade = risk_free_rate / trades_per_year
+    excess = returns - rf_per_trade
+    return (excess.mean() / returns.std()) * (trades_per_year ** 0.5)
 
-trades = simulate_trades(df)
-if not trades.empty:
+### --- print backetest results ---
+def print_results(trades: pd.DataFrame, full: bool = False) -> None:
+    if trades.empty:
+        print("No trades.")
+        return
     total_pnl = trades["pnl"].sum()
-    win_rate  = (trades["pnl"] > 0).mean()
-    by_reason = trades["exit_reason"].value_counts()
-    print(f"Trades: {len(trades)} | Total PnL: ${total_pnl:.2f} | Win rate: {win_rate:.1%} | Final portfolio: ${trades['portfolio'].iloc[-1]:.2f}")
-    print(f"Exits  — SL: {by_reason.get('sl', 0)} | TP: {by_reason.get('tp', 0)} | Signal: {by_reason.get('signal', 0)}")
-    print(trades[["entry_time", "exit_time", "entry_price", "exit_price", "signal", "ret", "pnl", "exit_reason", "candles", "time_held"]].to_string(index=False))
+    win_rate = (trades["pnl"] > 0).mean()
+    sharpe = sharpe_ratio(trades)
+    print(f"Trades: {len(trades)} | Total PnL: ${total_pnl:.2f} | Win rate: {win_rate:.1%} | Final portfolio: ${trades['portfolio'].iloc[-1]:.2f} | Sharpe: {sharpe:.2f}")
+    if full:
+        print(trades[["entry_time", "exit_time", "entry_price", "exit_price", "signal", "return", "pnl", "candles"]].to_string(index=False))
+
+### --- plot the strategy output ---
+def plot(df: pd.DataFrame) -> None:
+    _, (ax1, ax2, ax3, ax4) = plt.subplots(nrows=4, ncols=1, figsize=(12, 8))
+
+    ax1.plot(df["open_time"], df["close_price"], label="BTC/USDT")
+    ax1.plot(df["open_time"], df["ma_short"], alpha=0.7, label="MA-short")
+    ax1.plot(df["open_time"], df["ma_long"], alpha=0.7, label="MA-long")
+    ax1.plot(df["open_time"], df["ma_trend"], alpha=0.7, label="MA-trend")
+    ax1.vlines(df.loc[df["signal"] == 1, "open_time"], df["close_price"].min(), df["close_price"].max(), colors="green", alpha=0.5, label="Buy")
+    ax1.vlines(df.loc[df["signal"] == -1, "open_time"], df["close_price"].min(), df["close_price"].max(), colors="red", alpha=0.5, label="Sell")
+    ax1.set_title("MA's 20/50/200 BTC/USDT 15-min candle")
+    ax1.legend(fontsize=10)
+    ax1.grid(True, alpha=0.3)
+
+    ax2.plot(df["open_time"], df["volume_change"], label="Volume change (%)")
+    ax2.set_title("Quote asset volume change %")
+    ax2.legend(fontsize=10)
+    ax2.grid(True, alpha=0.3)
+
+    ax3.plot(df["open_time"], df["price_change"], color="purple", label="Price change (%)")
+    ax3.set_title("Close price change %")
+    ax3.legend(fontsize=10)
+    ax3.grid(True, alpha=0.3)
+
+    ax4.plot(df["open_time"], df["rsi"], color="orange", label="RSI-14")
+    ax4.axhline(60, linestyle="--", color="red", alpha=0.3, label="Overbought")
+    ax4.axhline(40, linestyle="--", color="green", alpha=0.3, label="Oversold")
+    ax4.set_title("RSI-14")
+    ax4.legend(fontsize=10)
+    ax4.grid(True, alpha=0.3)
+
+    date_fmt = mdates.DateFormatter("%b %d")
+    for ax in (ax1, ax2, ax3, ax4):
+        ax.xaxis.set_major_formatter(date_fmt)
+
+    plt.tight_layout()
+    plt.show()
 
 
-# plot ma's
+# --- run ---
+filepath = "data/org/marketdata/BTCUSDT_15m_2000-11-21 00:00:00_2026-02-23 00:00:00.csv"
 
-fig, (ax1, ax2, ax3, ax4) = plt.subplots(nrows=4, ncols=1, figsize=(12, 8))
+# grid search 
 
-# plot 1
-ax1.plot(df["open_time"], df["close_price"], alpha = 1, label = "BTC/USDT")
-ax1.plot(df["open_time"], df["ma_short"], alpha = 0.7, label = "MA-short")
-ax1.plot(df["open_time"], df["ma_long"], alpha = 0.7, label = "MA-long")
-ax1.plot(df["open_time"], df["ma_trend"], alpha = 0.7, label = "MA-trend")
+short_windows = [10, 20, 30]
+long_windows = [50, 70, 100]
+trend_windows = [100, 200]
+cross_persist = [1, 2, 3, 4]
+rsi_buy = 55 
+rsi_sell  = 45
+rsi_window = 14
 
-ax1.vlines(df.loc[df['signal'] == 1, "open_time"], ymin = df["close_price"].min(), ymax=df["close_price"].max(), colors="green", alpha = 0.5, label="Buy signal")
-ax1.vlines(df.loc[df['signal'] == -1, "open_time"], ymin = df["close_price"].min(), ymax=df["close_price"].max(), colors="red", alpha = 0.5, label="Buy signal")
+trade_size_pcts = [0.02, 0.05, 0.1]
+fee_pct = 0.0005
+leverage = 1
+init_portfolio = 1000
 
-ax1.grid(True, alpha=0.3)
-ax1.set_title("MA's 20/50/200 BTC/USDT 15-min candle")
-handles1, labels1 = ax1.get_legend_handles_labels()
-ax1.legend(handles1, labels1, fontsize = 10)
+all_results  = []
+i = 0
+# start_time = time.now()
+for short_window_i in short_windows:
+    for long_window_i in long_windows:
+        for trend_window_i in trend_windows:
+            for cross_persist_i in cross_persist:
+                for trade_size_pct_i in trade_size_pcts:
+                    df = load_df(filepath, start_date="2026-01-01", end_date="2026-03-01")
+                    df = add_indicators(df, short_window=short_window_i, long_window=long_window_i, trend_window=trend_window_i, rsi_window=rsi_window)
+                    df = add_signals(df, cross_persist=cross_persist_i, rsi_buy=rsi_buy, rsi_sell=rsi_sell)
+                    trades = simulate_trades(df, init_portfolio=init_portfolio, trade_size_pct=trade_size_pct_i, fee_pct=fee_pct, leverage=leverage)
+                    
+                    res_portolio = init_portfolio + trades["pnl"].sum()
+                    all_results.append(res_portolio)
+                    i+=1
+                    print(f"Combination {i} has been run backwards in time. Total portfolio is {res_portolio}. Pct change is {res_portolio * 100 / init_portfolio} %")
 
-# plot 2
-ax2.plot(df["open_time"], df["volume_change"], alpha = 1, label = "Quote asset volume change(%)")
-
-ax2.grid(True, alpha = 0.3)
-handles2, labels2 = ax2.get_legend_handles_labels()
-ax2.legend(handles2, labels2, fontsize = 10)
-ax2.set_title("BTC/USDT 15-min quote asset volume change in %")
-
-# plot3
-ax3.plot(df["open_time"], df["price_change"], alpha = 1, label = "Close price change(%)", color = "purple")
-
-ax3.grid(True, alpha = 0.3)
-handles3, labels3 = ax3.get_legend_handles_labels()
-ax3.legend(handles3, labels3, fontsize = 10)
-ax3.set_title("BTC/USDT close price change in %")
-
-
-# plot 4
-ax4.plot(df["open_time"], df["rsi"], alpha=1, label="RSI-14", color="orange")
-ax4.axhline(60, linestyle="--", color="red", alpha=0.3, label="Overbought (70)")
-ax4.axhline(40, linestyle="--", color="green", alpha=0.3, label="Oversold (30)")
-
-ax4.grid(True, alpha=0.3)
-handles4, labels4 = ax4.get_legend_handles_labels()
-ax4.legend(handles4, labels4, fontsize=10)
-ax4.set_title("RSI-14")
-
-date_fmt = mdates.DateFormatter("%b %d")
-for ax in (ax1, ax2, ax3, ax4):
-    ax.xaxis.set_major_formatter(date_fmt)
-
-plt.show()
+# end_time = time.now()
+# diff = end_time - start_time
+# print(f"Grid search process of backatesting an algorithm took {diff}.")
+# print_results(trades, full=False)
+# plot(df)
 
 
+np_all_results = np.array(all_results)
