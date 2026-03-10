@@ -8,12 +8,12 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
-BINANCE_URL = "https://api.binance.com"
+BINANCE_URL = "https://api.binance.us"
 
 symbol = "BTCUSDT"
 interval = "1m"
 
-check_interval_sec = 60
+check_interval_sec = 30
 
 
 def get_klines(limit=100):
