@@ -36,11 +36,6 @@ def send_discord_message(content: str) -> bool:
 
 
 def main():
-    print(f"Starting BTC price tracker...")
-    print(f"Interval: {INTERVAL_SECONDS // 60} minutes")
-    print(f"Discord webhook: {'configured' if DISCORD_WEBHOOK_URL else 'NOT SET'}")
-    print("-" * 40)
-
     while True:
         try:
             price = get_btc_price()

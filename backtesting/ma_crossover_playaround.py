@@ -59,27 +59,52 @@ def simulate_trades(df: pd.DataFrame, init_portfolio=1_000, trade_size_pct=0.1, 
     signal_idx = df[df["signal"] != 0].index.tolist()
     trades = []
 
-    for i, idx in enumerate(signal_idx):
+    position = 0
+    entry_idx = None
+
+    for idx in signal_idx:
         row = df.loc[idx]
-        end_idx = signal_idx[i + 1] if i + 1 < len(signal_idx) else df.index[-1]
-        exit_row = df.loc[end_idx]
+        sig = row["signal"]
 
-        direction = row["signal"]
-        entry = row["close_price"]
+        if position == 0:
+            position = sig
+            entry_idx = idx
+        elif sig == -position:
+            entry_row = df.loc[entry_idx]
+            entry = entry_row["close_price"]
+            exit_price = row["close_price"]
+            t_return = position * (exit_price - entry) / entry
+            pnl = (t_return * notional) - notional * fee_pct * 2
+            trades.append({
+                "entry_time":  entry_row["open_time"],
+                "exit_time":   row["open_time"],
+                "entry_price": entry,
+                "exit_price":  exit_price,
+                "signal":      position,
+                "return":      t_return,
+                "pnl":         pnl,
+                "candles":     len(df.loc[entry_idx:idx]) - 1,
+            })
+            position = 0
+            entry_idx = None
+
+    # force-exit any open position at end of data
+    if position != 0:
+        entry_row = df.loc[entry_idx]
+        exit_row = df.iloc[-1]
+        entry = entry_row["close_price"]
         exit_price = exit_row["close_price"]
-
-        t_return = direction * (exit_price - entry) / entry
+        t_return = position * (exit_price - entry) / entry
         pnl = (t_return * notional) - notional * fee_pct * 2
-
         trades.append({
-            "entry_time":  row["open_time"],
+            "entry_time":  entry_row["open_time"],
             "exit_time":   exit_row["open_time"],
             "entry_price": entry,
             "exit_price":  exit_price,
-            "signal":      direction,
+            "signal":      position,
             "return":      t_return,
             "pnl":         pnl,
-            "candles":     len(df.loc[idx:end_idx]) - 1,
+            "candles":     len(df.loc[entry_idx:]) - 1,
         })
 
     t = pd.DataFrame(trades)
@@ -110,15 +135,24 @@ def print_results(trades: pd.DataFrame, full: bool = False) -> None:
         print(trades[["entry_time", "exit_time", "entry_price", "exit_price", "signal", "return", "pnl", "candles"]].to_string(index=False))
 
 ### --- plot the strategy output ---
-def plot(df: pd.DataFrame) -> None:
+def plot(df: pd.DataFrame, trades: pd.DataFrame = None) -> None:
     _, (ax1, ax2, ax3, ax4) = plt.subplots(nrows=4, ncols=1, figsize=(12, 8))
 
     ax1.plot(df["open_time"], df["close_price"], label="BTC/USDT")
     ax1.plot(df["open_time"], df["ma_short"], alpha=0.7, label="MA-short")
     ax1.plot(df["open_time"], df["ma_long"], alpha=0.7, label="MA-long")
     ax1.plot(df["open_time"], df["ma_trend"], alpha=0.7, label="MA-trend")
-    ax1.vlines(df.loc[df["signal"] == 1, "open_time"], df["close_price"].min(), df["close_price"].max(), colors="green", alpha=0.5, label="Buy")
-    ax1.vlines(df.loc[df["signal"] == -1, "open_time"], df["close_price"].min(), df["close_price"].max(), colors="red", alpha=0.5, label="Sell")
+
+    if trades is not None and not trades.empty:
+        buy_entries  = trades.loc[trades["signal"] ==  1, "entry_time"]
+        sell_entries = trades.loc[trades["signal"] == -1, "entry_time"]
+    else:
+        buy_entries  = df.loc[df["signal"] ==  1, "open_time"]
+        sell_entries = df.loc[df["signal"] == -1, "open_time"]
+
+    price_min, price_max = df["close_price"].min(), df["close_price"].max()
+    ax1.vlines(buy_entries,  price_min, price_max, colors="green", alpha=0.5, label="Buy")
+    ax1.vlines(sell_entries, price_min, price_max, colors="red",   alpha=0.5, label="Sell")
     ax1.set_title("MA's 20/50/200 BTC/USDT 15-min candle")
     ax1.legend(fontsize=10)
     ax1.grid(True, alpha=0.3)
@@ -147,48 +181,62 @@ def plot(df: pd.DataFrame) -> None:
     plt.tight_layout()
     plt.show()
 
+### --- run grid search algorithm to find the best hypoparameters ---
+def run_grid_search(
+        filepath: str = "data/org/marketdata/BTCUSDT_15m_2000-11-21 00:00:00_2026-02-23 00:00:00.csv",
+        short_windows: list = [10, 20, 30],
+        long_windows: list = [50, 70, 100],
+        trend_windows: list = [100, 200],
+        cross_persist: list = [1, 2, 3, 4],
+        rsi_buy: int = 55,
+        rsi_sell: int = 45,
+        rsi_window: int = 14,
+        trade_size_pcts: list = [0.02, 0.05, 0.1],
+        fee_pct: float = 0.0005,
+        leverage: int = 1,
+        init_portfolio: int = 1000,
+        start_date: str = "2026-01-01",
+        end_date: str = "2026-03-01",
+):
+    all_results = []
+    best_trades = None
+    best_df = None
+    best_portfolio = -float("inf")
+    i = 0
 
-# --- run ---
-filepath = "data/org/marketdata/BTCUSDT_15m_2000-11-21 00:00:00_2026-02-23 00:00:00.csv"
+    for short_window_i in short_windows:
+        for long_window_i in long_windows:
+            for trend_window_i in trend_windows:
+                for cross_persist_i in cross_persist:
+                    for trade_size_pct_i in trade_size_pcts:
+                        df = load_df(filepath, start_date=start_date, end_date=end_date)
+                        df = add_indicators(df, short_window=short_window_i, long_window=long_window_i, trend_window=trend_window_i, rsi_window=rsi_window)
+                        df = add_signals(df, cross_persist=cross_persist_i, rsi_buy=rsi_buy, rsi_sell=rsi_sell)
+                        trades = simulate_trades(df, init_portfolio=init_portfolio, trade_size_pct=trade_size_pct_i, fee_pct=fee_pct, leverage=leverage)
 
-# grid search 
+                        res_portfolio = init_portfolio + trades["pnl"].sum()
+                        sharpe = sharpe_ratio(trades) if not trades.empty else float("nan")
+                        result_entry = {
+                            "short_window": short_window_i,
+                            "long_window": long_window_i,
+                            "trend_window": trend_window_i,
+                            "cross_persist": cross_persist_i,
+                            "trade_size_pct": trade_size_pct_i,
+                            "final_portfolio": round(res_portfolio, 2),
+                            "pct_return": round((res_portfolio * 100 / init_portfolio) - 100, 2),
+                            "trade_count": len(trades),
+                            "win_rate_pct": round(float((trades["pnl"] > 0).mean()) * 100, 1) if not trades.empty else 0,
+                            "sharpe": round(float(sharpe), 3) if sharpe == sharpe else None,
+                        }
+                        all_results.append(result_entry)
+                        i += 1
+                        print(f"Combination {i}: portfolio={res_portfolio:.2f} ({result_entry['pct_return']:+.1f}%)")
 
-short_windows = [10, 20, 30]
-long_windows = [50, 70, 100]
-trend_windows = [100, 200]
-cross_persist = [1, 2, 3, 4]
-rsi_buy = 55 
-rsi_sell  = 45
-rsi_window = 14
+                        if res_portfolio > best_portfolio:
+                            best_portfolio = res_portfolio
+                            best_trades = trades.copy()
+                            best_df = df.copy()
 
-trade_size_pcts = [0.02, 0.05, 0.1]
-fee_pct = 0.0005
-leverage = 1
-init_portfolio = 1000
-
-all_results  = []
-i = 0
-# start_time = time.now()
-for short_window_i in short_windows:
-    for long_window_i in long_windows:
-        for trend_window_i in trend_windows:
-            for cross_persist_i in cross_persist:
-                for trade_size_pct_i in trade_size_pcts:
-                    df = load_df(filepath, start_date="2026-01-01", end_date="2026-03-01")
-                    df = add_indicators(df, short_window=short_window_i, long_window=long_window_i, trend_window=trend_window_i, rsi_window=rsi_window)
-                    df = add_signals(df, cross_persist=cross_persist_i, rsi_buy=rsi_buy, rsi_sell=rsi_sell)
-                    trades = simulate_trades(df, init_portfolio=init_portfolio, trade_size_pct=trade_size_pct_i, fee_pct=fee_pct, leverage=leverage)
-                    
-                    res_portolio = init_portfolio + trades["pnl"].sum()
-                    all_results.append(res_portolio)
-                    i+=1
-                    print(f"Combination {i} has been run backwards in time. Total portfolio is {res_portolio}. Pct change is {res_portolio * 100 / init_portfolio} %")
-
-# end_time = time.now()
-# diff = end_time - start_time
-# print(f"Grid search process of backatesting an algorithm took {diff}.")
-# print_results(trades, full=False)
-# plot(df)
+    return best_trades, best_df, all_results
 
 
-np_all_results = np.array(all_results)
