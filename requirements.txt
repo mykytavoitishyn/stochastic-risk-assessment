@@ -13,3 +13,5 @@ pyyaml
 jupyter
 python-dotenv
 borch
+anthropic>=0.28.0
+discord.py>=2.3.0
