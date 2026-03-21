@@ -4,3 +4,4 @@ configs
 data
 __pycache__
 docs
+node_modules
