@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 
 # --- replay signals and collect raw trade records ---
 def simulate_trades(
@@ -85,4 +86,16 @@ def evaluate_trades(trades: pd.DataFrame, init_portfolio=1_000, trade_size_pct=0
     t["return"] = t["signal"] * (t["exit_price"] - t["entry_price"]) / t["entry_price"]
     t["pnl"] = (t["return"] * notional) - notional * fee_pct * 2
     t["portfolio"] = init_portfolio + t["pnl"].cumsum()
+
+    # max drawdown
+    running_max = t["portfolio"].cummax()
+    t["drawdown"] = (t["portfolio"] - running_max) / running_max
+
+    # sharpe ratio (annualised, assuming each trade is independent)
+    if t["pnl"].std() > 0:
+        t.attrs["sharpe"] = round(t["pnl"].mean() / t["pnl"].std() * np.sqrt(len(t)), 2)
+    else:
+        t.attrs["sharpe"] = 0.0
+    t.attrs["max_drawdown"] = round(t["drawdown"].min() * 100, 2)  # as %
+
     return t.sort_values(by="pnl")

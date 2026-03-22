@@ -12,6 +12,8 @@ mlflow>=3.4.0
 pyyaml
 jupyter
 python-dotenv
+fastapi
+uvicorn[standard]
 borch
 anthropic>=0.28.0
 discord.py>=2.3.0
