@@ -9,21 +9,23 @@ from backtesting.macrossover.src.trade import simulate_trades, evaluate_trades
 from backtesting.macrossover.src.result import plot, summarize
 import pandas as pd
 
-data_path = "data/org/marketdata/BTCUSDT_15m_2000-11-21 00:00:00_2026-02-23 00:00:00.csv"
+BACKTEST_START = "2026-03-01"
+BACKTEST_END   = "2026-03-21"
 
 # load dataframe
 rawdf= load_df(
-    datapath=data_path, 
-    start_date=pd.to_datetime("2025-10-01"),
-    end_date=pd.to_datetime("2026-03-21")
+    ticker = "BTCUSDT",
+    timeframe = "15m",
+    start_date="2024-03-21",  # data file identifier — do not change
+    end_date="2026-03-21"
 )
 
 # add technical indicsators
 df_with_indicators = add_indicators(
     df = rawdf,
     short_window=10,
-    long_window=20,
-    trend_window=100,
+    long_window=50,
+    trend_window=200,
     rsi_window=14
 )
 
@@ -35,11 +37,16 @@ df_with_signals = add_signals(
     rsi_sell=45
 )
 
+df_with_signals = df_with_signals[
+    (df_with_signals["close_time"] > pd.to_datetime(BACKTEST_START)) &
+    (df_with_signals["close_time"] <= pd.to_datetime(BACKTEST_END))
+]
+
 trades = simulate_trades(
     df=df_with_signals,
-    tp_pct=0.05,
-    sl_pct=0.02,
-    max_candles=96 # keep open trade for max one day
+    tp_pct=0.03,
+    sl_pct=0.01,
+    max_candles=None # keep open trade for max one day
 )
 resdf = evaluate_trades(
     trades=trades,
@@ -50,4 +57,4 @@ resdf = evaluate_trades(
 )
 
 summarize(resdf)
-plot(df_with_signals)
+plot(df_with_signals, trades=resdf)

@@ -85,6 +85,7 @@ def evaluate_trades(trades: pd.DataFrame, init_portfolio=1_000, trade_size_pct=0
     t = trades.copy()
     t["return"] = t["signal"] * (t["exit_price"] - t["entry_price"]) / t["entry_price"]
     t["pnl"] = (t["return"] * notional) - notional * fee_pct * 2
+    t = t.sort_values("exit_time").reset_index(drop=True)
     t["portfolio"] = init_portfolio + t["pnl"].cumsum()
 
     # max drawdown
@@ -97,5 +98,6 @@ def evaluate_trades(trades: pd.DataFrame, init_portfolio=1_000, trade_size_pct=0
     else:
         t.attrs["sharpe"] = 0.0
     t.attrs["max_drawdown"] = round(t["drawdown"].min() * 100, 2)  # as %
+    t.attrs["final_portfolio"] = round(t["portfolio"].iloc[-1], 2)
 
-    return t.sort_values(by="pnl")
+    return t.sort_values("pnl").reset_index(drop=True)
