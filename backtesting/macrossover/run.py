@@ -9,7 +9,7 @@ from backtesting.macrossover.src.trade import simulate_trades, evaluate_trades
 from backtesting.macrossover.src.result import plot, summarize
 import pandas as pd
 
-BACKTEST_START = "2026-03-01"
+BACKTEST_START = "2025-03-21"
 BACKTEST_END   = "2026-03-21"
 
 # load dataframe
@@ -44,16 +44,16 @@ df_with_signals = df_with_signals[
 
 trades = simulate_trades(
     df=df_with_signals,
-    tp_pct=0.03,
-    sl_pct=0.01,
+    tp_pct=0.05,
+    sl_pct=0.07,
     max_candles=None # keep open trade for max one day
 )
 resdf = evaluate_trades(
     trades=trades,
-    init_portfolio=1000,
+    init_portfolio=5000,
     trade_size_pct=0.1,
     fee_pct=0.005,
-    leverage=10
+    leverage=1
 )
 
 summarize(resdf)
