@@ -36,6 +36,8 @@ def run_validation(
     if run_dir is None:
         run_dir = latest_run_dir(runs_base)
 
+    print(f"── Validation · {strategy_name} · {symbol} {interval}  [test: {test_start} → {test_end}]")
+
     TEST_START = pd.to_datetime(test_start)
     TEST_END   = pd.to_datetime(test_end)
 

@@ -20,11 +20,13 @@ def add_signals(df: pd.DataFrame, roc_buy=2.0, roc_sell=-2.0, use_vol_filter=Fal
     df["signal"] = 0
     buy_mask = (
         (df["roc_smooth"] > roc_buy)
+        & (df["roc_smooth"].shift(1) <= roc_buy)
         & (df["close_price"] > df["ma_trend"])
         & vol_ok
     )
     sell_mask = (
         (df["roc_smooth"] < roc_sell)
+        & (df["roc_smooth"].shift(1) >= roc_sell)
         & (df["close_price"] < df["ma_trend"])
         & vol_ok
     )

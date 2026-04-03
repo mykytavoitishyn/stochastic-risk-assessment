@@ -17,8 +17,8 @@ RUN_END    = "2026-03-21"
 
 INDICATORS = dict(roc_window=10, smooth_window=3, trend_window=200)
 SIGNALS    = dict(roc_buy=2.0, roc_sell=-2.0)
-TRADES     = dict(tp_pct=0.05, sl_pct=0.02, max_candles=192)
-EVAL       = dict(init_portfolio=1000, trade_size_pct=0.1, fee_pct=0.001, leverage=1)
+TRADES     = dict(tp_pct=0.03, sl_pct=0.03, max_candles=192)
+EVAL       = dict(init_portfolio=1000, trade_size_pct=0.1, fee_pct=0.001, leverage=5)
 
 df = load_df(ticker=SYMBOL, timeframe=INTERVAL, start_date=DATA_START, end_date=DATA_END)
 df = add_indicators(df, **INDICATORS)

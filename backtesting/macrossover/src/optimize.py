@@ -18,4 +18,5 @@ def run_grid_search(symbol, interval, data_start, data_end, train_start, train_e
         build_df=_build_df,
         is_valid=lambda p: p["short_window"] < p["long_window"] < p["trend_window"],
         readme_cols=_COLS,
+        format_combo=lambda p: f"s={int(p['short_window'])} l={int(p['long_window'])} t={int(p['trend_window'])} tp={p['tp_pct']} sl={p['sl_pct']}",
     )

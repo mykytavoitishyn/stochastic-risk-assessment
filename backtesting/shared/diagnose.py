@@ -7,6 +7,7 @@ from backtesting.shared.validate import latest_run_dir
 
 
 def run_diagnose(
+    strategy_name: str,
     runs_base: str,
     symbol: str,
     interval: str,
@@ -24,7 +25,7 @@ def run_diagnose(
         run_dir = latest_run_dir(runs_base)
 
     p = pd.read_csv(f"{run_dir}/grid_search.csv").iloc[rank]
-    print(f"rank-{rank + 1}  sharpe={p['sharpe']}  tp={p['tp_pct']}  sl={p['sl_pct']}")
+    print(f"── Diagnose · {strategy_name} · {symbol} {interval}  [test: {test_start} → {test_end}  |  rank-{rank + 1}  sharpe={p['sharpe']:+.2f}  tp={p['tp_pct']}  sl={p['sl_pct']}]")
 
     TEST_START = pd.to_datetime(test_start)
     TEST_END   = pd.to_datetime(test_end)

@@ -18,4 +18,5 @@ def run_grid_search(symbol, interval, data_start, data_end, train_start, train_e
         build_df=_build_df,
         is_valid=lambda p: p["roc_buy"] > 0 and p["roc_sell"] < 0,
         readme_cols=_COLS,
+        format_combo=lambda p: f"roc={int(p['roc_window'])} buy={p['roc_buy']} sell={p['roc_sell']} tp={p['tp_pct']} sl={p['sl_pct']}",
     )

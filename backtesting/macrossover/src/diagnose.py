@@ -9,7 +9,7 @@ def _build_df(rawdf, p):
 
 def run_diagnose(symbol, interval, data_start, data_end, test_start, test_end, eval_params, run_dir=None, rank=0):
     return _run(
-        runs_base="results/macrossover",
+        strategy_name="MA Crossover", runs_base="results/macrossover",
         symbol=symbol, interval=interval,
         data_start=data_start, data_end=data_end,
         test_start=test_start, test_end=test_end,

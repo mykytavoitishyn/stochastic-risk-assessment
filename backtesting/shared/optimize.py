@@ -19,20 +19,24 @@ def run_grid_search(
     train_end: str,
     grid: dict,
     eval_params: dict,
-    build_df,       # (rawdf_copy, params) -> df with indicators + signals
-    is_valid,       # (params) -> bool
+    build_df,           # (rawdf_copy, params) -> df with indicators + signals
+    is_valid,           # (params) -> bool
     readme_cols: list,
+    format_combo=None,  # (params) -> str  — key params for the per-combo progress line
 ) -> str:
     START = pd.to_datetime(train_start)
     END   = pd.to_datetime(train_end)
 
     keys   = list(grid.keys())
     combos = [dict(zip(keys, v)) for v in itertools.product(*grid.values()) if is_valid(dict(zip(keys, v)))]
+    width  = len(str(len(combos)))
+
+    print(f"── Grid Search · {strategy_name} · {symbol} {interval}  [{train_start} → {train_end}  |  {len(combos)} combos]")
 
     rawdf   = load_df(ticker=symbol, timeframe=interval, start_date=data_start, end_date=data_end)
     results = []
 
-    for p in combos:
+    for i, p in enumerate(combos):
         try:
             df     = build_df(rawdf.copy(), p)
             df     = df[(df["close_time"] > START) & (df["close_time"] <= END)]
@@ -50,6 +54,9 @@ def run_grid_search(
                 "max_drawdown": ev.attrs.get("max_drawdown", 0),
                 "avg_candles":  round(ev["candles"].mean(), 1),
             })
+            r = results[-1]
+            desc = f"  {format_combo(p)}" if format_combo else ""
+            print(f"  [{i+1:{width}}/{len(combos)}]{desc}  →  sharpe={r['sharpe']:+.2f}  wr={r['win_rate']}%  n={r['trades']}")
         except Exception:
             continue
 
