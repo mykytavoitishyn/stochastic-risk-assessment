@@ -1,18 +1,33 @@
 import matplotlib.pyplot as plt
-import pandas as pd
-from typing import Dict
 import matplotlib.dates as mdates
+import pandas as pd
 
 
-### --- plot the strategy output ---
-def plot(df: pd.DataFrame, trades: pd.DataFrame = None) -> None:
-    fig, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, figsize=(14, 8), sharex=True)
+# --- generic strategy plot ---
+# price_overlays: list of (col_name, label, color) to plot on the price panel
+# indicator_panel: optional dict {"col": str, "label": str, "buy": float, "sell": float}
+#                  adds a middle panel with the indicator + threshold lines
+def plot(
+    df: pd.DataFrame,
+    trades: pd.DataFrame = None,
+    price_overlays: list = None,
+    indicator_panel: dict = None,
+) -> None:
+    n_rows = 3 if indicator_panel else 2
+    height_ratios = [3, 1.5, 1.5] if indicator_panel else [3, 1.5]
+    fig, axes = plt.subplots(nrows=n_rows, ncols=1, figsize=(14, 4 * n_rows + 2),
+                             sharex=True, gridspec_kw={"height_ratios": height_ratios})
+    ax1 = axes[0]
+    ax_ind = axes[1] if indicator_panel else None
+    ax_port = axes[-1]
 
-    # --- price + MAs ---
-    ax1.plot(df["open_time"], df["close_price"], color="black", linewidth=0.8, label="BTC/USDT")
-    ax1.plot(df["open_time"], df["ma_short"],  alpha=0.7, linewidth=0.8, label="MA-short")
-    ax1.plot(df["open_time"], df["ma_long"],   alpha=0.7, linewidth=0.8, label="MA-long")
-    ax1.plot(df["open_time"], df["ma_trend"],  alpha=0.5, linewidth=0.8, label="MA-trend")
+    # --- price ---
+    ax1.plot(df["open_time"], df["close_price"], color="black", linewidth=0.8, label="Price")
+    for col, label, color in (price_overlays or []):
+        kw = {"alpha": 0.6, "linewidth": 0.8, "label": label}
+        if color:
+            kw["color"] = color
+        ax1.plot(df["open_time"], df[col], **kw)
 
     EXIT_MARKERS = {"tp": ("*", 12), "sl": ("x", 8), "timeout": ("s", 6), "signal": ("o", 6), "end": ("D", 6)}
     EXIT_COLORS  = {"tp": "lime",    "sl": "red",    "timeout": "orange",  "signal": "grey",   "end": "purple"}
@@ -21,14 +36,10 @@ def plot(df: pd.DataFrame, trades: pd.DataFrame = None) -> None:
         for _, tr in trades.iterrows():
             side_color = "green" if tr["signal"] == 1 else "red"
             marker = "^" if tr["signal"] == 1 else "v"
-            # entry
-            ax1.scatter(tr["entry_time"], tr["entry_price"], marker=marker,
-                        color=side_color, s=70, zorder=5)
-            # exit — shape encodes reason, color encodes outcome
+            ax1.scatter(tr["entry_time"], tr["entry_price"], marker=marker, color=side_color, s=70, zorder=5)
             m, ms = EXIT_MARKERS.get(tr["exit_reason"], ("x", 8))
             ec = EXIT_COLORS.get(tr["exit_reason"], "grey")
-            ax1.scatter(tr["exit_time"], tr["exit_price"], marker=m,
-                        color=ec, s=ms**2, zorder=5, linewidths=1.2)
+            ax1.scatter(tr["exit_time"], tr["exit_price"], marker=m, color=ec, s=ms**2, zorder=5, linewidths=1.2)
 
         entry_long  = plt.Line2D([0], [0], marker="^", color="w", markerfacecolor="green", markersize=9, label="Entry long")
         entry_short = plt.Line2D([0], [0], marker="v", color="w", markerfacecolor="red",   markersize=9, label="Entry short")
@@ -41,21 +52,40 @@ def plot(df: pd.DataFrame, trades: pd.DataFrame = None) -> None:
     else:
         ax1.legend(fontsize=9)
 
-    ax1.set_title("BTC/USDT — Price & Trades")
+    ax1.set_title("Price & Trades")
     ax1.grid(True, alpha=0.3)
 
-    # --- portfolio over time ---
+    # --- optional indicator panel ---
+    if indicator_panel and ax_ind is not None:
+        col   = indicator_panel["col"]
+        label = indicator_panel.get("label", col)
+        buy   = indicator_panel.get("buy")
+        sell  = indicator_panel.get("sell")
+
+        ax_ind.plot(df["open_time"], df[col], color="steelblue", linewidth=0.9, label=label)
+        ax_ind.axhline(0, color="grey", linewidth=0.6, linestyle="--")
+        if buy is not None:
+            ax_ind.axhline(buy,  color="green", linewidth=0.8, linestyle="--", label=f"Buy ({buy})")
+        if sell is not None:
+            ax_ind.axhline(sell, color="red",   linewidth=0.8, linestyle="--", label=f"Sell ({sell})")
+        ax_ind.fill_between(df["open_time"], df[col], 0, where=(df[col] > 0), alpha=0.15, color="green")
+        ax_ind.fill_between(df["open_time"], df[col], 0, where=(df[col] < 0), alpha=0.15, color="red")
+        ax_ind.set_title(label)
+        ax_ind.legend(fontsize=9)
+        ax_ind.grid(True, alpha=0.3)
+
+    # --- portfolio ---
     if trades is not None and not trades.empty:
         t_sorted = trades.sort_values("exit_time")
         init = t_sorted["portfolio"].iloc[0] - t_sorted["pnl"].iloc[0]
-        ax2.plot(t_sorted["exit_time"], t_sorted["portfolio"], color="steelblue", linewidth=1.2, label="Portfolio")
-        ax2.axhline(init, linestyle="--", color="grey", alpha=0.5, label="Initial")
-        ax2.fill_between(t_sorted["exit_time"], init, t_sorted["portfolio"], alpha=0.15, color="steelblue")
-        ax2.set_title("Portfolio Value Over Time")
-        ax2.legend(fontsize=9)
-        ax2.grid(True, alpha=0.3)
+        ax_port.plot(t_sorted["exit_time"], t_sorted["portfolio"], color="steelblue", linewidth=1.2, label="Portfolio")
+        ax_port.axhline(init, linestyle="--", color="grey", alpha=0.5, label="Initial")
+        ax_port.fill_between(t_sorted["exit_time"], init, t_sorted["portfolio"], alpha=0.15, color="steelblue")
+        ax_port.set_title("Portfolio Value Over Time")
+        ax_port.legend(fontsize=9)
+        ax_port.grid(True, alpha=0.3)
     else:
-        ax2.set_visible(False)
+        ax_port.set_visible(False)
 
     date_fmt = mdates.DateFormatter("%b %d")
     ax1.xaxis.set_major_locator(mdates.WeekdayLocator(interval=96))

@@ -2,8 +2,8 @@ import pandas as pd
 
 def load_df(
         ticker: str,
-        timeframe: str, 
-        start_date: str, 
+        timeframe: str,
+        start_date: str,
         end_date: str
     ) -> pd.DataFrame:
 
