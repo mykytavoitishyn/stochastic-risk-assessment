@@ -2,9 +2,16 @@ import os
 from datetime import datetime
 
 import pandas as pd
+from rich import box
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
 
 from backtesting.shared.load import load_df
 from backtesting.shared.trade import simulate_trades, evaluate_trades
+
+_console = Console()
 
 
 def latest_run_dir(runs_base: str) -> str:
@@ -22,11 +29,10 @@ def run_validation(
     runs_base: str,
     symbol: str,
     interval: str,
-    data_start: str,
-    data_end: str,
     test_start: str,
     test_end: str,
     eval_params: dict,
+    asset_type: str,
     build_df,          # (rawdf_copy, params) -> df with indicators + signals
     make_param_row,    # (params) -> dict of strategy-specific columns for the output row
     format_best,       # (best_row) -> str describing the best config (for MD)
@@ -36,13 +42,13 @@ def run_validation(
     if run_dir is None:
         run_dir = latest_run_dir(runs_base)
 
-    print(f"── Validation · {strategy_name} · {symbol} {interval}  [test: {test_start} → {test_end}]")
+    _console.print(f"[bold]Validation[/bold]  ·  {strategy_name}  ·  {symbol} {interval}  [test: {test_start} → {test_end}]")
 
     TEST_START = pd.to_datetime(test_start)
     TEST_END   = pd.to_datetime(test_end)
 
     top_configs = pd.read_csv(f"{run_dir}/grid_search.csv").head(top_n)
-    rawdf       = load_df(ticker=symbol, timeframe=interval, start_date=data_start, end_date=data_end)
+    rawdf       = load_df(ticker=symbol, timeframe=interval, asset_type=asset_type)
     rows        = []
 
     for _, p in top_configs.iterrows():
@@ -77,13 +83,36 @@ def run_validation(
 
     df_out  = pd.DataFrame(rows)
     passing = df_out[df_out["pass"] == "YES"]
-    print(f"Validation: {len(passing)}/{len(df_out)} passed  [{test_start} → {test_end}]")
+
+    # ── results table ─────────────────────────────────────────────────────────
+    display_cols = [c for c in df_out.columns if c != "pass"]
+    tbl = Table(box=box.SIMPLE_HEAD, header_style="bold cyan", show_lines=False)
+    for c in display_cols:
+        tbl.add_column(c, justify="right")
+    tbl.add_column("pass", justify="center")
+    for _, row in df_out.iterrows():
+        passed = row.get("pass") == "YES"
+        row_style = "green" if passed else ""
+        tbl.add_row(
+            *[str(row[c]) for c in display_cols],
+            Text("YES", style="bold green") if passed else Text("no", style="dim"),
+            style=row_style,
+        )
+    pass_style = "green" if len(passing) > 0 else "red"
+    _console.print(Panel(
+        tbl,
+        title=f"[bold]Validation Results[/bold]  [{test_start} → {test_end}]",
+        subtitle=Text(f"{len(passing)}/{len(df_out)} passed", style=f"bold {pass_style}"),
+        border_style="bright_blue",
+        padding=(0, 1),
+    ))
 
     best_block = ""
     if not passing.empty:
         best       = passing.sort_values("test_sharpe", ascending=False).iloc[0]
         best_block = f"\n## Best config\n\n```\n{format_best(best)}\n```\n\nSharpe={best['test_sharpe']}, win_rate={best['test_wr%']}%, drawdown={best['test_dd%']}%\n"
 
+    _console.print(f"[dim]Saved → {run_dir}/validate.csv[/dim]")
     df_out.to_csv(f"{run_dir}/validate.csv", index=False)
     md = (
         f"# Validation — {strategy_name}\n\n"

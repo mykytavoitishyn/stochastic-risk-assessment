@@ -14,13 +14,12 @@ def _format_best(b):
             f"roc_buy={b['roc_b']}, roc_sell={b['roc_s']}\n"
             f"tp_pct={b['tp']}, sl_pct={b['sl']}")
 
-def run_validation(symbol, interval, data_start, data_end, test_start, test_end, eval_params, run_dir=None, top_n=10):
+def run_validation(symbol, interval, test_start, test_end, eval_params, asset_type, run_dir=None, top_n=10):
     return _run(
         strategy_name="Momentum (Price ROC)", runs_base="results/momentum",
         symbol=symbol, interval=interval,
-        data_start=data_start, data_end=data_end,
         test_start=test_start, test_end=test_end,
-        eval_params=eval_params,
+        eval_params=eval_params, asset_type=asset_type,
         build_df=_build_df, make_param_row=_make_param_row, format_best=_format_best,
         run_dir=run_dir, top_n=top_n,
     )

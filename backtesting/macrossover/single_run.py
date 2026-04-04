@@ -8,10 +8,9 @@ from backtesting.shared.trade import simulate_trades, evaluate_trades
 from backtesting.shared.result import plot, summarize
 import pandas as pd
 
-SYMBOL    = "BTCUSDT"
-INTERVAL  = "15m"
-DATA_START = "2024-03-21"
-DATA_END   = "2026-03-21"
+SYMBOL     = "BTCUSDT"
+ASSET_TYPE = "crypto"
+INTERVAL   = "15m"
 RUN_START  = "2025-09-21"
 RUN_END    = "2026-03-21"
 
@@ -20,7 +19,7 @@ SIGNALS    = dict(cross_persist=2, rsi_buy=55, rsi_sell=45, use_vol_filter=False
 TRADES     = dict(tp_pct=0.05, sl_pct=0.07, max_candles=None)
 EVAL       = dict(init_portfolio=1000, trade_size_pct=0.1, fee_pct=0.001, leverage=1)
 
-df = load_df(ticker=SYMBOL, timeframe=INTERVAL, start_date=DATA_START, end_date=DATA_END)
+df = load_df(ticker=SYMBOL, timeframe=INTERVAL, asset_type=ASSET_TYPE)
 df = add_indicators(df, **INDICATORS)
 df = add_signals(df, **SIGNALS)
 df = df[(df["close_time"] > pd.to_datetime(RUN_START)) & (df["close_time"] <= pd.to_datetime(RUN_END))]

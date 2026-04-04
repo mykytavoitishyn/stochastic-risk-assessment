@@ -4,10 +4,9 @@ os.chdir(root); sys.path.insert(0, root)
 
 from backtesting.macrossover.src.optimize import run_grid_search
 
-SYMBOL   = "BTCUSDT"
-INTERVAL = "15m"
-DATA_START  = "2024-03-21"
-DATA_END    = "2026-03-21"
+SYMBOL     = "BTCUSDT"
+ASSET_TYPE = "crypto"
+INTERVAL   = "15m"
 TRAIN_START = "2024-03-21"
 TRAIN_END   = "2025-09-21"   # test window (2025-09-21 → 2026-03-21) held out for validate.py
 
@@ -28,7 +27,6 @@ GRID = {
 
 run_grid_search(
     symbol=SYMBOL, interval=INTERVAL,
-    data_start=DATA_START, data_end=DATA_END,
     train_start=TRAIN_START, train_end=TRAIN_END,
-    grid=GRID, eval_params=EVAL_PARAMS,
+    grid=GRID, eval_params=EVAL_PARAMS, asset_type=ASSET_TYPE,
 )

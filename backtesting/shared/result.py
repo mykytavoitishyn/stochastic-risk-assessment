@@ -2,6 +2,15 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import pandas as pd
 
+from rich import box
+from rich.columns import Columns
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
+
+_console = Console()
+
 
 # --- generic strategy plot ---
 # price_overlays: list of (col_name, label, color) to plot on the price panel
@@ -98,7 +107,7 @@ def plot(
 # --- print backtest summary ---
 def summarize(trades: pd.DataFrame) -> None:
     if trades.empty:
-        print("No trades.")
+        _console.print(Panel(Text("No trades.", style="dim"), title="Backtest Results", border_style="dim"))
         return
 
     wins     = trades[trades["pnl"] > 0]
@@ -108,24 +117,58 @@ def summarize(trades: pd.DataFrame) -> None:
     sharpe          = trades.attrs.get("sharpe", "n/a")
     max_drawdown    = trades.attrs.get("max_drawdown", "n/a")
     final_portfolio = trades.attrs.get("final_portfolio", trades.sort_values("exit_time")["portfolio"].iloc[-1])
+    total_pnl       = trades["pnl"].sum()
 
-    lines = [
-        "=" * 40,
-        f"Trades       : {len(trades)}",
-        f"Win rate     : {win_rate:.1f}%  ({len(wins)}W / {len(losses)}L)",
-        f"Total PnL    : ${trades['pnl'].sum():.2f}",
-        f"Final portf. : ${final_portfolio:.2f}",
-        f"Avg PnL/trade: ${trades['pnl'].mean():.2f}",
-        f"Best trade   : ${trades['pnl'].max():.2f}",
-        f"Worst trade  : ${trades['pnl'].min():.2f}",
-        f"Avg candles  : {trades['candles'].mean():.1f}",
-        f"Sharpe ratio : {sharpe}",
-        f"Max drawdown : {max_drawdown}%",
-        "-" * 40,
-        "Exit reasons :",
-    ]
+    # ── stats grid ───────────────────────────────────────────────────────────
+    stats = Table.grid(padding=(0, 3))
+    stats.add_column(style="bold cyan", no_wrap=True)
+    stats.add_column(no_wrap=True)
+    stats.add_column(style="bold cyan", no_wrap=True)
+    stats.add_column(no_wrap=True)
+
+    wr_style  = "green" if win_rate >= 50 else "red"
+    pnl_style = "green" if total_pnl >= 0 else "red"
+    dd_val    = max_drawdown if max_drawdown == "n/a" else f"{max_drawdown}%"
+
+    stats.add_row(
+        "Trades",      str(len(trades)),
+        "Win rate",    Text(f"{win_rate:.1f}%  ({len(wins)}W / {len(losses)}L)", style=wr_style),
+    )
+    stats.add_row(
+        "Total PnL",   Text(f"${total_pnl:+.2f}", style=pnl_style),
+        "Final portf", f"${final_portfolio:.2f}",
+    )
+    stats.add_row(
+        "Avg / trade", f"${trades['pnl'].mean():.2f}",
+        "Sharpe",      str(sharpe),
+    )
+    stats.add_row(
+        "Best trade",  Text(f"${trades['pnl'].max():.2f}", style="green"),
+        "Drawdown",    Text(dd_val, style="red"),
+    )
+    stats.add_row(
+        "Worst trade", Text(f"${trades['pnl'].min():.2f}", style="red"),
+        "Avg candles", f"{trades['candles'].mean():.1f}",
+    )
+
+    # ── exit reasons ─────────────────────────────────────────────────────────
+    reasons = Table(box=box.SIMPLE_HEAD, show_header=True, header_style="bold dim", padding=(0, 2))
+    reasons.add_column("Exit reason")
+    reasons.add_column("Count", justify="right")
+    reasons.add_column("Share", justify="right")
+
+    REASON_STYLES = {"tp": "green", "sl": "red", "timeout": "yellow", "signal": "cyan", "end": "dim"}
     for reason, count in trades["exit_reason"].value_counts().items():
-        lines.append(f"  {reason:<10} {count:>4}  ({count/len(trades)*100:.1f}%)")
-    lines.append("=" * 40)
+        style = REASON_STYLES.get(reason, "")
+        reasons.add_row(
+            Text(reason, style=style),
+            str(count),
+            f"{count / len(trades) * 100:.1f}%",
+        )
 
-    print("\n".join(lines))
+    _console.print(Panel(
+        Columns([stats, reasons], equal=False, expand=True),
+        title="[bold]Backtest Results[/bold]",
+        border_style="bright_blue",
+        padding=(1, 2),
+    ))

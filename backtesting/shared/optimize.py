@@ -3,9 +3,15 @@ import itertools
 from datetime import datetime
 
 import pandas as pd
+from rich.console import Console
+from rich.progress import BarColumn, MofNCompleteColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
+from rich.table import Table
+from rich import box
 
 from backtesting.shared.load import load_df
 from backtesting.shared.trade import simulate_trades, evaluate_trades
+
+_console = Console()
 
 
 def run_grid_search(
@@ -13,10 +19,9 @@ def run_grid_search(
     runs_base: str,
     symbol: str,
     interval: str,
-    data_start: str,
-    data_end: str,
     train_start: str,
     train_end: str,
+    asset_type: str,
     grid: dict,
     eval_params: dict,
     build_df,           # (rawdf_copy, params) -> df with indicators + signals
@@ -31,34 +36,51 @@ def run_grid_search(
     combos = [dict(zip(keys, v)) for v in itertools.product(*grid.values()) if is_valid(dict(zip(keys, v)))]
     width  = len(str(len(combos)))
 
-    print(f"── Grid Search · {strategy_name} · {symbol} {interval}  [{train_start} → {train_end}  |  {len(combos)} combos]")
+    _console.print(f"[bold]Grid Search[/bold]  ·  {strategy_name}  ·  {symbol} {interval}  [{train_start} → {train_end}  |  {len(combos)} combos]")
 
-    rawdf   = load_df(ticker=symbol, timeframe=interval, start_date=data_start, end_date=data_end)
+    rawdf   = load_df(ticker=symbol, timeframe=interval, asset_type=asset_type)
     results = []
 
-    for i, p in enumerate(combos):
-        try:
-            df     = build_df(rawdf.copy(), p)
-            df     = df[(df["close_time"] > START) & (df["close_time"] <= END)]
-            trades = simulate_trades(df, tp_pct=p["tp_pct"], sl_pct=p["sl_pct"], max_candles=p["max_candles"])
-            if trades.empty:
-                continue
-            ev = evaluate_trades(trades, **eval_params)
-            results.append({
-                **p,
-                "trades":       len(ev),
-                "win_rate":     round(len(ev[ev["pnl"] > 0]) / len(ev) * 100, 1),
-                "total_pnl":    round(ev["pnl"].sum(), 2),
-                "final_portf":  ev.attrs.get("final_portfolio", 0),
-                "sharpe":       ev.attrs.get("sharpe", 0),
-                "max_drawdown": ev.attrs.get("max_drawdown", 0),
-                "avg_candles":  round(ev["candles"].mean(), 1),
-            })
-            r = results[-1]
-            desc = f"  {format_combo(p)}" if format_combo else ""
-            print(f"  [{i+1:{width}}/{len(combos)}]{desc}  →  sharpe={r['sharpe']:+.2f}  wr={r['win_rate']}%  n={r['trades']}")
-        except Exception:
-            continue
+    progress = Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        MofNCompleteColumn(),
+        TimeElapsedColumn(),
+        TextColumn("{task.fields[status]}"),
+        console=_console,
+        transient=False,
+    )
+
+    with progress:
+        task = progress.add_task("Running combos", total=len(combos), status="")
+        for i, p in enumerate(combos):
+            desc = format_combo(p) if format_combo else f"combo {i+1}"
+            progress.update(task, description=desc)
+            try:
+                df     = build_df(rawdf.copy(), p)
+                df     = df[(df["close_time"] > START) & (df["close_time"] <= END)]
+                trades = simulate_trades(df, tp_pct=p["tp_pct"], sl_pct=p["sl_pct"], max_candles=p["max_candles"])
+                if trades.empty:
+                    progress.advance(task)
+                    continue
+                ev = evaluate_trades(trades, **eval_params)
+                results.append({
+                    **p,
+                    "trades":       len(ev),
+                    "win_rate":     round(len(ev[ev["pnl"] > 0]) / len(ev) * 100, 1),
+                    "total_pnl":    round(ev["pnl"].sum(), 2),
+                    "final_portf":  ev.attrs.get("final_portfolio", 0),
+                    "sharpe":       ev.attrs.get("sharpe", 0),
+                    "max_drawdown": ev.attrs.get("max_drawdown", 0),
+                    "avg_candles":  round(ev["candles"].mean(), 1),
+                })
+                r = results[-1]
+                sharpe_style = "green" if r["sharpe"] > 0 else "red"
+                progress.update(task, status=f"[{sharpe_style}]sharpe={r['sharpe']:+.2f}[/{sharpe_style}]  wr={r['win_rate']}%  n={r['trades']}")
+            except Exception:
+                pass
+            progress.advance(task)
 
     os.makedirs(runs_base, exist_ok=True)
     prefix   = f"{datetime.now().strftime('%Y%m%d')}_{symbol}_{interval}_"
@@ -82,5 +104,16 @@ def run_grid_search(
     with open(f"{run_dir}/README.md", "w") as f:
         f.write(md)
 
-    print(f"Grid search: {len(df_results)} results → {run_dir}")
+    # ── top results table ─────────────────────────────────────────────────────
+    top = df_results.head(10)
+    tbl = Table(title=f"Top {len(top)} by Sharpe", box=box.SIMPLE_HEAD, header_style="bold cyan", show_lines=False)
+    display_cols = [c for c in ["sharpe", "win_rate", "trades", "total_pnl", "max_drawdown", "avg_candles"] if c in top.columns]
+    for c in display_cols:
+        tbl.add_column(c, justify="right")
+    for _, row in top.iterrows():
+        sharpe_val = row.get("sharpe", 0)
+        style = "green" if sharpe_val > 0 else "red"
+        tbl.add_row(*[f"{row[c]}" for c in display_cols], style=style)
+    _console.print(tbl)
+    _console.print(f"[dim]Grid search: {len(df_results)} results → {run_dir}[/dim]")
     return run_dir
