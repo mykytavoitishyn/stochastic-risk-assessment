@@ -4,7 +4,7 @@ os.chdir(root)
 sys.path.insert(0, root)
 
 from dotenv import load_dotenv
-from src.marketdata import ping_binance, get_balance, send_market_buy_order, send_market_sell_order
+from binance_testnet import ping_binance, get_balance, send_market_buy_order, send_market_sell_order
 
 load_dotenv()
 

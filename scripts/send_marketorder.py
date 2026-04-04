@@ -5,7 +5,7 @@ sys.path.insert(0, root)
 
 import os
 from dotenv import load_dotenv
-from src.marketdata import send_market_buy_order, send_market_sell_order
+from binance_testnet import send_market_buy_order, send_market_sell_order
 
 load_dotenv()
 
