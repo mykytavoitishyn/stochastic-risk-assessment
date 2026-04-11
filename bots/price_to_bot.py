@@ -1,7 +1,8 @@
 import os
 import time
-import requests
 from datetime import datetime
+
+import requests
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -11,13 +12,15 @@ BINANCE_BASE_URL = "https://api.binance.com"
 SYMBOL = "BTCUSDT"
 INTERVAL_SECONDS = 60
 
-def get_btc_price() -> dict:
+
+def get_btc_price() -> float:
     """Fetch current BTC price from Binance."""
     url = f"{BINANCE_BASE_URL}/api/v3/ticker/price"
     response = requests.get(url, params={"symbol": SYMBOL})
     response.raise_for_status()
     data = response.json()
     return float(data["price"])
+
 
 def get_volume_overview() -> dict:
     """Fetch 24h volume stats for BTC from Binance."""
@@ -26,8 +29,8 @@ def get_volume_overview() -> dict:
     response.raise_for_status()
     data = response.json()
     return {
-        "volume": float(data["volume"]),          # BTC traded
-        "quote_volume": float(data["quoteVolume"]), # USDT traded
+        "volume": float(data["volume"]),  # BTC traded
+        "quote_volume": float(data["quoteVolume"]),  # USDT traded
         "price_change_pct": float(data["priceChangePercent"]),
         "high": float(data["highPrice"]),
         "low": float(data["lowPrice"]),
@@ -41,11 +44,9 @@ def send_discord_message(content: str) -> bool:
         print("Error: DISCORD_WEBHOOK_URL not set in .env")
         return False
 
-    response = requests.post(
-        DISCORD_WEBHOOK_URL,
-        json={"content": content}
-    )
+    response = requests.post(DISCORD_WEBHOOK_URL, json={"content": content})
     return response.status_code == 204
+
 
 def main():
     while True:
